@@ -11,6 +11,7 @@ import com.pranav.society_vehicle_manager.entity.User;
 import com.pranav.society_vehicle_manager.entity.Vehicle;
 import com.pranav.society_vehicle_manager.entity.Membership;
 import com.pranav.society_vehicle_manager.enums.MembershipStatus;
+import com.pranav.society_vehicle_manager.enums.AccountStatus;
 import com.pranav.society_vehicle_manager.enums.Role;
 import com.pranav.society_vehicle_manager.exception.AccessDeniedException;
 import com.pranav.society_vehicle_manager.exception.UserNotFoundException;
@@ -38,10 +39,14 @@ public class EntryExitService {
         this. entryExitMapper = entryExitMapper;
     }
 
-    public List<EntryExitResponse> getSocietyEntryExitHistory(long userId) {
+    public List<EntryExitResponse> getSocietyEntryExitHistory(long authenticatedUserId) {
         // get the user;
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(authenticatedUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        if (user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot view entry/exit history");
+        }
 
         // user should be guard or Admin to veiw the history
         if (user.getRole() != Role.ADMIN &&
@@ -59,27 +64,36 @@ public class EntryExitService {
                 .toList();
 
     }
-    public List<EntryExitResponse> getVehicleEntryExitHistory(long userId, String registrationNumber) {
+    public List<EntryExitResponse> getVehicleEntryExitHistory(long authenticatedUserId, String registrationNumber) {
         // get the user;
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(authenticatedUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
+        if (user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot view vehicle history");
+        }
 
         // check whether vehicle exists or not
-        Vehicle vehicle = vehicleRepository.findByRegistrationNumber(registrationNumber)
-                                           .orElseThrow(() -> new VehicleNotFoundException("No Vehicle exists with this " + registrationNumber));
-        // user should be the owner of the vehicle or the Admin of the society.
+        String normalizedRegistrationNumber = registrationNumber.trim().toUpperCase();
+        Vehicle vehicle = vehicleRepository.findByRegistrationNumber(normalizedRegistrationNumber)
+                .orElseThrow(() -> new VehicleNotFoundException(
+                        "No vehicle exists with this " + normalizedRegistrationNumber));
+        // The owner or active society staff member may view this vehicle's history.
 
         Society society = vehicle.getMembership().getSociety();
-        boolean isOwner = vehicle.getMembership().getUser().getId().equals(user.getId());
+        boolean isOwner = user.getRole() == Role.RESIDENT
+                && vehicle.getMembership().getUser().getId().equals(user.getId());
         boolean isAdminOfSameSociety = user.getRole() == Role.ADMIN
                 && membershipRepository.existsByUserAndSocietyAndStatus(user, society, MembershipStatus.ACTIVE);
+        boolean isGuardOfSameSociety = user.getRole() == Role.GUARD
+                && membershipRepository.existsByUserAndSocietyAndStatus(user, society, MembershipStatus.ACTIVE);
 
-        if(!isOwner && !isAdminOfSameSociety) {
+        if (!isOwner && !isAdminOfSameSociety && !isGuardOfSameSociety) {
             throw new AccessDeniedException("User not authorized to view the vehicle history");
         }
 
         // get the records of the vehicles in the entryexitrecords that have this society
-        List<EntryExitRecord> entryExitRecords = entryExitRecordRepository.findByVehicle_RegistrationNumberOrderByTimestampDesc(registrationNumber);
+        List<EntryExitRecord> entryExitRecords = entryExitRecordRepository
+                .findByVehicle_RegistrationNumberOrderByTimestampDesc(normalizedRegistrationNumber);
 
         return entryExitRecords.stream()
                 .map(entryExitMapper::toResponse)

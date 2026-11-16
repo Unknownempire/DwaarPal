@@ -36,8 +36,11 @@ public class VehicleController {
     }
 
     @GetMapping("/vehicles/{registrationNumber}")
-    public ResponseEntity<VehicleResponse> getVehicle(@PathVariable String registrationNumber) {
-        VehicleResponse response = vehicleService.findByRegistrationNumber(registrationNumber);
+    public ResponseEntity<VehicleResponse> getVehicle(
+            @PathVariable String registrationNumber,
+            @AuthenticationPrincipal Jwt jwt) {
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        VehicleResponse response = vehicleService.findByRegistrationNumber(registrationNumber, authenticatedUserId);
         return ResponseEntity.ok(response);
     }
 

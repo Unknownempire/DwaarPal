@@ -120,6 +120,14 @@ public class GlobalExceptionHandler {
                 .body(error);
     }
 
+    @ExceptionHandler(SocietyNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleSocietyNotFound(SocietyNotFoundException exception) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
+                exception.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
     @ExceptionHandler(InvalidStatusException.class)
     public ResponseEntity<ErrorResponse> handleInvalidStatus(InvalidStatusException exception) {
         ErrorResponse error = new ErrorResponse(

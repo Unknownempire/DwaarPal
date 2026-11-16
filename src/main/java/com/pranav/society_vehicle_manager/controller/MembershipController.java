@@ -4,6 +4,8 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,30 +32,36 @@ public class MembershipController {
     }
 
     @PostMapping
-    public ResponseEntity<MembershipResponse> apply(@RequestParam long userId,
+    public ResponseEntity<MembershipResponse> apply(@AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody MembershipApplicationRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(membershipService.apply(userId, request));
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        return ResponseEntity.status(HttpStatus.CREATED).body(membershipService.apply(authenticatedUserId, request));
     }
 
     @GetMapping("/mine")
-    public ResponseEntity<List<MembershipResponse>> mine(@RequestParam long userId) {
-        return ResponseEntity.ok(membershipService.myMemberships(userId));
+    public ResponseEntity<List<MembershipResponse>> mine(@AuthenticationPrincipal Jwt jwt) {
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        return ResponseEntity.ok(membershipService.myMemberships(authenticatedUserId));
     }
 
     @GetMapping("/pending")
-    public ResponseEntity<List<MembershipResponse>> pending(@RequestParam long adminUserId,
+    public ResponseEntity<List<MembershipResponse>> pending(@AuthenticationPrincipal Jwt jwt,
             @RequestParam long societyId) {
-        return ResponseEntity.ok(membershipService.pendingForSociety(adminUserId, societyId));
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        return ResponseEntity.ok(membershipService.pendingForSociety(authenticatedUserId, societyId));
     }
 
     @PatchMapping("/{membershipId}/decision")
     public ResponseEntity<MembershipResponse> decide(@PathVariable long membershipId,
-            @RequestParam long adminUserId, @RequestParam MembershipStatus decision) {
-        return ResponseEntity.ok(membershipService.decide(membershipId, adminUserId, decision));
+            @AuthenticationPrincipal Jwt jwt, @RequestParam MembershipStatus decision) {
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        return ResponseEntity.ok(membershipService.decide(membershipId, authenticatedUserId, decision));
     }
 
     @PatchMapping("/{membershipId}/leave")
-    public ResponseEntity<MembershipResponse> leave(@PathVariable long membershipId, @RequestParam long userId) {
-        return ResponseEntity.ok(membershipService.leave(membershipId, userId));
+    public ResponseEntity<MembershipResponse> leave(@PathVariable long membershipId,
+            @AuthenticationPrincipal Jwt jwt) {
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        return ResponseEntity.ok(membershipService.leave(membershipId, authenticatedUserId));
     }
 }

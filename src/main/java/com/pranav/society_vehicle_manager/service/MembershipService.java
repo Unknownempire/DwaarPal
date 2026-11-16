@@ -19,6 +19,7 @@ import com.pranav.society_vehicle_manager.enums.AccountStatus;
 import com.pranav.society_vehicle_manager.enums.Role;
 import com.pranav.society_vehicle_manager.exception.AccessDeniedException;
 import com.pranav.society_vehicle_manager.exception.MembershipConflictException;
+import com.pranav.society_vehicle_manager.exception.SocietyNotFoundException;
 import com.pranav.society_vehicle_manager.exception.UserNotFoundException;
 import com.pranav.society_vehicle_manager.mapper.MembershipMapper;
 import com.pranav.society_vehicle_manager.repository.FlatRepository;
@@ -44,16 +45,10 @@ public class MembershipService {
     }
 
     @Transactional
-    public MembershipResponse apply(long userId, MembershipApplicationRequest request) {
-        User user = getUser(userId);
-        if (user.getStatus() != AccountStatus.ACTIVE) {
-            throw new AccessDeniedException("Inactive accounts cannot apply for memberships");
-        }
-        if (user.getRole() != Role.RESIDENT) {
-            throw new AccessDeniedException("Only residents can apply for a membership");
-        }
+    public MembershipResponse apply(Long authenticatedUserId, MembershipApplicationRequest request) {
+        User user = requireActiveResident(authenticatedUserId);
         Society society = societyRepository.findById(request.getSocietyId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Society not found"));
+                .orElseThrow(() -> new SocietyNotFoundException("Society not found"));
         Flat flat = flatRepository.findById(request.getFlatId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Flat not found"));
         if (!flat.getBuilding().getSociety().getId().equals(society.getId())) {
@@ -76,37 +71,40 @@ public class MembershipService {
     }
 
     @Transactional(readOnly = true)
-    public List<MembershipResponse> myMemberships(long userId) {
-        User user = getUser(userId);
+    public List<MembershipResponse> myMemberships(long authenticatedUserId) {
+        User user = requireActiveResident(authenticatedUserId);
         return membershipRepository.findByUserOrderByAppliedAtDesc(user).stream()
                 .map(membershipMapper::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<MembershipResponse> pendingForSociety(long adminUserId, long societyId) {
-        User admin = getUser(adminUserId);
+    public List<MembershipResponse> pendingForSociety(long authenticatedUserId, long societyId) {
+        User admin = getUser(authenticatedUserId);
         Society society = societyRepository.findById(societyId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Society not found"));
+                .orElseThrow(() -> new SocietyNotFoundException("Society not found"));
         requireAdminOfSociety(admin, society);
         return membershipRepository.findBySocietyAndStatusOrderByAppliedAtAsc(society, MembershipStatus.PENDING)
                 .stream().map(membershipMapper::toResponse).toList();
     }
 
     @Transactional
-    public MembershipResponse decide(long membershipId, long adminUserId, MembershipStatus decision) {
+    public MembershipResponse decide(long membershipId, long authenticatedUserId, MembershipStatus decision) {
         if (decision != MembershipStatus.ACTIVE && decision != MembershipStatus.REJECTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision must be ACTIVE or REJECTED");
         }
         Membership membership = membershipRepository.findById(membershipId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Membership not found"));
-        User admin = getUser(adminUserId);
+        User admin = getUser(authenticatedUserId);
         requireAdminOfSociety(admin, membership.getSociety());
         if (membership.getStatus() != MembershipStatus.PENDING) {
             throw new MembershipConflictException("Membership request has already been processed");
         }
-        if (decision == MembershipStatus.ACTIVE && membershipRepository.existsByUserAndSocietyAndStatus(
-                membership.getUser(), membership.getSociety(), MembershipStatus.ACTIVE)) {
-            throw new MembershipConflictException("User already has an active membership in this society");
+        if (decision == MembershipStatus.ACTIVE) {
+            requireActiveResident(membership.getUser());
+            if (membershipRepository.existsByUserAndSocietyAndStatus(
+                    membership.getUser(), membership.getSociety(), MembershipStatus.ACTIVE)) {
+                throw new MembershipConflictException("User already has an active membership in this society");
+            }
         }
         membership.setStatus(decision);
         membership.setReviewer(admin);
@@ -115,10 +113,10 @@ public class MembershipService {
     }
 
     @Transactional
-    public MembershipResponse leave(long membershipId, long userId) {
+    public MembershipResponse leave(long membershipId, long authenticatedUserId) {
         Membership membership = membershipRepository.findById(membershipId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Membership not found"));
-        User user = getUser(userId);
+        User user = requireActiveResident(authenticatedUserId);
         if (!membership.getUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("Membership does not belong to this user");
         }
@@ -132,18 +130,39 @@ public class MembershipService {
 
     public Membership requireActiveMembership(long userId, long societyId) {
         User user = getUser(userId);
+        if (user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot use society memberships");
+        }
         Society society = societyRepository.findById(societyId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Society not found"));
+                .orElseThrow(() -> new SocietyNotFoundException("Society not found"));
         return membershipRepository.findFirstByUserAndSocietyAndStatus(user, society, MembershipStatus.ACTIVE)
                 .orElseThrow(() -> new AccessDeniedException("User has no active membership in this society"));
     }
 
     private void requireAdminOfSociety(User admin, Society society) {
+        if (admin.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot review membership requests");
+        }
         if (admin.getRole() != Role.ADMIN) {
             throw new AccessDeniedException("Only an admin can review membership requests");
         }
         membershipRepository.findFirstByUserAndSocietyAndStatus(admin, society, MembershipStatus.ACTIVE)
                 .orElseThrow(() -> new AccessDeniedException("Admin does not have an active membership in this society"));
+    }
+
+    private User requireActiveResident(long userId) {
+        User user = getUser(userId);
+        requireActiveResident(user);
+        return user;
+    }
+
+    private void requireActiveResident(User user) {
+        if (user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot manage resident memberships");
+        }
+        if (user.getRole() != Role.RESIDENT) {
+            throw new AccessDeniedException("Only residents can manage resident memberships");
+        }
     }
 
     private User getUser(long userId) {

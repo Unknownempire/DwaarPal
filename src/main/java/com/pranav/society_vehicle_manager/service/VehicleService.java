@@ -28,6 +28,7 @@ import com.pranav.society_vehicle_manager.exception.AccessDeniedException;
 import com.pranav.society_vehicle_manager.exception.GateNotFoundException;
 import com.pranav.society_vehicle_manager.exception.InvalidStatusException;
 import com.pranav.society_vehicle_manager.exception.InvalidVehicleMovementException;
+import com.pranav.society_vehicle_manager.exception.SocietyNotFoundException;
 import com.pranav.society_vehicle_manager.exception.UserNotFoundException;
 import com.pranav.society_vehicle_manager.exception.VehicleAlreadyExistsException;
 import com.pranav.society_vehicle_manager.exception.VehicleAlreadyProcessedException;
@@ -69,13 +70,31 @@ public class VehicleService {
         this.entryExitMapper = entryExitMapper;
     }
 
-    public VehicleResponse findByRegistrationNumber(String registrationNumber) {
+    public VehicleResponse findByRegistrationNumber(String registrationNumber, long authenticatedUserId) {
         String normalizedRegistrationNumber = registrationNumber.trim().toUpperCase();
+
+        User user = userRepository.findById(authenticatedUserId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+        if (user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot view vehicle details");
+        }
 
         Vehicle vehicle = vehicleRepository
                 .findByRegistrationNumber(normalizedRegistrationNumber)
                 .orElseThrow(() -> new VehicleNotFoundException(
                         "Vehicle not found " + normalizedRegistrationNumber));
+
+        Membership vehicleMembership = vehicle.getMembership();
+        boolean isResidentOwner = user.getRole() == Role.RESIDENT
+                && vehicleMembership.getUser().getId().equals(user.getId())
+                && vehicleMembership.getStatus() == MembershipStatus.ACTIVE;
+        boolean isSocietyStaff = (user.getRole() == Role.ADMIN || user.getRole() == Role.GUARD)
+                && membershipRepository.existsByUserAndSocietyAndStatus(
+                        user, vehicleMembership.getSociety(), MembershipStatus.ACTIVE);
+
+        if (!isResidentOwner && !isSocietyStaff) {
+            throw new AccessDeniedException("User is not authorized to view this vehicle");
+        }
 
         return vehicleMapper.toResponse(vehicle);
     }
@@ -134,6 +153,9 @@ public class VehicleService {
         User user = userRepository.findById(authenticatedUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
+        if (user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot update vehicle status");
+        }
         if (!user.getRole().equals(Role.ADMIN)) {
             // throw exception that this user is not authorized to do so.
             throw new AccessDeniedException("User is not Authorized to update the status");
@@ -149,7 +171,7 @@ public class VehicleService {
 
         //check vehicle belongs to the admins's society
         Society adminSociety = societyRepository.findById(societyId)
-                .orElseThrow(() -> new UserNotFoundException("Society not found"));
+                .orElseThrow(() -> new SocietyNotFoundException("Society not found"));
         if (!membershipRepository.existsByUserAndSocietyAndStatus(user, adminSociety, MembershipStatus.ACTIVE)) {
             throw new AccessDeniedException("Admin does not have an active membership in this society");
         }
@@ -177,13 +199,16 @@ public class VehicleService {
                 .findById(authenticatedUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
+        if (user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot view pending vehicles");
+        }
         if (!user.getRole().equals(Role.ADMIN)) {
             // user is not an admin
             throw new AccessDeniedException("User is not Authorized");
         }
 
         Society society = societyRepository.findById(societyId)
-                .orElseThrow(() -> new UserNotFoundException("Society not found"));
+                .orElseThrow(() -> new SocietyNotFoundException("Society not found"));
         if (!membershipRepository.existsByUserAndSocietyAndStatus(user, society, MembershipStatus.ACTIVE)) {
             throw new AccessDeniedException("Admin does not have an active membership in this society");
         }

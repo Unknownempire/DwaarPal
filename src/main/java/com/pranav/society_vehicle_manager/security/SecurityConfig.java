@@ -82,6 +82,17 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/vehicles").hasRole("RESIDENT")
                         .requestMatchers(HttpMethod.POST, "/api/vehicles/*/entry-exit").hasRole("GUARD")
                         .requestMatchers(HttpMethod.GET, "/api/vehicles/my-vehicles").hasRole("RESIDENT")
+                        .requestMatchers(HttpMethod.GET, "/api/vehicles/*").hasAnyRole("RESIDENT", "GUARD", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/societies/*/gates").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("RESIDENT")
+                        .requestMatchers(HttpMethod.GET, "/api/memberships/mine").hasRole("RESIDENT")
+                        .requestMatchers(HttpMethod.GET, "/api/memberships/pending").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/memberships/*/decision").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/memberships/*/leave").hasRole("RESIDENT")
+                        .requestMatchers(HttpMethod.GET, "/api/gates").hasRole("GUARD")
+                        .requestMatchers(HttpMethod.GET, "/api/entry-exit/history").hasAnyRole("ADMIN", "GUARD")
+                        .requestMatchers(HttpMethod.GET, "/api/entry-exit/vehicles/*/history")
+                        .hasAnyRole("RESIDENT", "ADMIN", "GUARD")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 ->
                         oauth2.jwt(jwt ->
