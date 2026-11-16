@@ -14,20 +14,28 @@ import com.pranav.society_vehicle_manager.exception.UserNotFoundException;
 import com.pranav.society_vehicle_manager.mapper.GateMapper;
 import com.pranav.society_vehicle_manager.repository.GateRepository;
 import com.pranav.society_vehicle_manager.repository.UserRepository;
+import com.pranav.society_vehicle_manager.repository.MembershipRepository;
+import com.pranav.society_vehicle_manager.repository.SocietyRepository;
+import com.pranav.society_vehicle_manager.enums.MembershipStatus;
 
 @Service 
 public class GateService {
     private final GateRepository gateRepository;
     private final UserRepository userRepository;
+    private final MembershipRepository membershipRepository;
+    private final SocietyRepository societyRepository;
     private final GateMapper gateMapper;
 
-    public GateService(GateRepository gateRepository, UserRepository userRepository, GateMapper gateMapper) {
+    public GateService(GateRepository gateRepository, UserRepository userRepository, MembershipRepository membershipRepository,
+            SocietyRepository societyRepository, GateMapper gateMapper) {
         this.gateRepository = gateRepository;
         this.userRepository = userRepository;
+        this.membershipRepository = membershipRepository;
+        this.societyRepository = societyRepository;
         this.gateMapper = gateMapper;
     }
 
-    public List<GateResponse> getGates(long userId) {
+    public List<GateResponse> getGates(long userId, long societyId) {
         // Get the user
         User user = userRepository.findById(userId)
                                   .orElseThrow(() -> new UserNotFoundException("User not found"));
@@ -38,7 +46,11 @@ public class GateService {
         }
         // now get the gates for this guards society
 
-        Society society = user.getSociety();
+        Society society = societyRepository.findById(societyId)
+                .orElseThrow(() -> new UserNotFoundException("Society not found"));
+        if (!membershipRepository.existsByUserAndSocietyAndStatus(user, society, MembershipStatus.ACTIVE)) {
+            throw new AccessDeniedException("Guard does not have an active membership in this society");
+        }
         List<Gate> gates = gateRepository.findBySociety(society);
         // map it to gateResponse
 

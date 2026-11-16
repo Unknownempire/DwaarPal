@@ -2,11 +2,13 @@ package com.pranav.society_vehicle_manager.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.pranav.society_vehicle_manager.dto.ErrorResponse;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -128,6 +130,12 @@ public class GlobalExceptionHandler {
                 .body(error);
     }
 
+    @ExceptionHandler(MembershipConflictException.class)
+    public ResponseEntity<ErrorResponse> handleMembershipConflict(MembershipConflictException exception) {
+        ErrorResponse error = new ErrorResponse(HttpStatus.CONFLICT.value(), exception.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
     @ExceptionHandler(VehicleNotApprovedException.class)
     public ResponseEntity<ErrorResponse> handleVehicleNoteApprovedException(VehicleNotApprovedException exception) {
         ErrorResponse error = new ErrorResponse(
@@ -136,6 +144,32 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(error);
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleAuthenticationFailure(
+            AuthenticationException exception) {
+
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.UNAUTHORIZED.value(),
+                "Invalid phone number or password");
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(error);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+            ResponseStatusException exception) {
+
+        int status = exception.getStatusCode().value();
+        String message = exception.getReason() != null
+                ? exception.getReason()
+                : "Request failed";
+
+        ErrorResponse error = new ErrorResponse(status, message);
+        return ResponseEntity.status(status).body(error);
     }
 
 }

@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import com.pranav.society_vehicle_manager.entity.Membership;
 import com.pranav.society_vehicle_manager.entity.Society;
 import com.pranav.society_vehicle_manager.entity.User;
 import com.pranav.society_vehicle_manager.entity.Vehicle;
@@ -15,10 +16,15 @@ public interface VehicleRepository extends JpaRepository<Vehicle,Long>{
 
     boolean existsByRegistrationNumber(String registrationNumber);
 
-    List<Vehicle> findBySocietyAndStatus(Society society, Status status);
+    List<Vehicle> findByMembership_SocietyAndStatus(Society society, Status status);
 
     //find vehicle based on userId
-    List<Vehicle> findByOwner(User owner);
+    List<Vehicle> findByMembership_User(User owner);
+
+    List<Vehicle> findByMembershipIn(List<Membership> memberships);
+
+    List<Vehicle> findByMembership_SocietyAndStatusAndMembership_Status(Society society, Status status,
+            com.pranav.society_vehicle_manager.enums.MembershipStatus membershipStatus);
 
 
 }

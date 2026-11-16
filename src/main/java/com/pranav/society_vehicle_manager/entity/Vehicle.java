@@ -41,10 +41,6 @@ public class Vehicle {
     private VehicleLocationStatus locationStatus;
 
     @ManyToOne
-    @JoinColumn(name = "user_id", nullable = false)
-    private User owner;
-
-    @ManyToOne
-    @JoinColumn(name = "society_id", nullable = false)
-    private Society society;
+    @JoinColumn(name = "membership_id", nullable = false)
+    private Membership membership;
 }

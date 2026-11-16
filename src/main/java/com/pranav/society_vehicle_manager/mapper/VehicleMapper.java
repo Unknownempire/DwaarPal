@@ -15,8 +15,10 @@ public class VehicleMapper {
         response.setCompany(vehicle.getCompany());
         response.setModel(vehicle.getModel());
         response.setStatus(vehicle.getStatus());
-        response.setOwnerName(vehicle.getOwner() == null ? null : vehicle.getOwner().getName());
-        response.setFlatNumber(vehicle.getOwner().getFlat() == null ? null : vehicle.getOwner().getFlat().getFlatNumber());
+        response.setOwnerName(vehicle.getMembership().getUser().getName());
+        response.setFlatNumber(vehicle.getMembership().getFlat() == null ? null : vehicle.getMembership().getFlat().getFlatNumber());
+        response.setMembershipId(vehicle.getMembership().getId());
+        response.setMembershipStatus(vehicle.getMembership().getStatus());
 
         return response;
     }

@@ -2,8 +2,6 @@ package com.pranav.society_vehicle_manager.service;
 
 import java.util.List;
 
-import javax.management.RuntimeErrorException;
-
 import org.springframework.stereotype.Service;
 
 import com.pranav.society_vehicle_manager.dto.EntryExitResponse;
@@ -11,6 +9,8 @@ import com.pranav.society_vehicle_manager.entity.EntryExitRecord;
 import com.pranav.society_vehicle_manager.entity.Society;
 import com.pranav.society_vehicle_manager.entity.User;
 import com.pranav.society_vehicle_manager.entity.Vehicle;
+import com.pranav.society_vehicle_manager.entity.Membership;
+import com.pranav.society_vehicle_manager.enums.MembershipStatus;
 import com.pranav.society_vehicle_manager.enums.Role;
 import com.pranav.society_vehicle_manager.exception.AccessDeniedException;
 import com.pranav.society_vehicle_manager.exception.UserNotFoundException;
@@ -19,6 +19,7 @@ import com.pranav.society_vehicle_manager.mapper.EntryExitMapper;
 import com.pranav.society_vehicle_manager.repository.EntryExitRecordRepository;
 import com.pranav.society_vehicle_manager.repository.UserRepository;
 import com.pranav.society_vehicle_manager.repository.VehicleRepository;
+import com.pranav.society_vehicle_manager.repository.MembershipRepository;
 
 @Service
 public class EntryExitService {
@@ -26,11 +27,14 @@ public class EntryExitService {
     private final UserRepository userRepository;
     private final VehicleRepository vehicleRepository;
     private final EntryExitMapper entryExitMapper;
+    private final MembershipRepository membershipRepository;
 
-    public EntryExitService(EntryExitRecordRepository entryExitRecordRepository, UserRepository userRepository, VehicleRepository vehicleRepository, EntryExitMapper entryExitMapper) {
+    public EntryExitService(EntryExitRecordRepository entryExitRecordRepository, UserRepository userRepository,
+            VehicleRepository vehicleRepository, MembershipRepository membershipRepository, EntryExitMapper entryExitMapper) {
         this.entryExitRecordRepository = entryExitRecordRepository;
         this.userRepository = userRepository;
         this.vehicleRepository = vehicleRepository;
+        this.membershipRepository = membershipRepository;
         this. entryExitMapper = entryExitMapper;
     }
 
@@ -46,13 +50,11 @@ public class EntryExitService {
                     "Only Admins and Guards can view entry/exit history");
         }
 
-        // get the society
-        Society society = user.getSociety();
-
-        // get the records of the vehicles in the entryexitrecords that have this society
-        List<EntryExitRecord> entryExitRecords = entryExitRecordRepository.findByVehicle_SocietyOrderByTimestampDesc(society);
-
-        return entryExitRecords.stream()
+        List<Society> societies = membershipRepository.findByUserAndStatus(user, MembershipStatus.ACTIVE).stream()
+                .map(Membership::getSociety).distinct().toList();
+        return societies.stream()
+                .flatMap(society -> entryExitRecordRepository
+                        .findByVehicle_Membership_SocietyOrderByTimestampDesc(society).stream())
                 .map(entryExitMapper::toResponse)
                 .toList();
 
@@ -67,16 +69,13 @@ public class EntryExitService {
                                            .orElseThrow(() -> new VehicleNotFoundException("No Vehicle exists with this " + registrationNumber));
         // user should be the owner of the vehicle or the Admin of the society.
 
-        //society should be same
-        if(vehicle.getSociety() != user.getSociety()) {
-            throw new RuntimeException("Vehicle and user society is different");
-        }
-
-        boolean isOwner = vehicle.getOwner() == user ? true : false;
-        boolean isAdminOfSameSociety = user.getRole() == Role.ADMIN ? true : false;
+        Society society = vehicle.getMembership().getSociety();
+        boolean isOwner = vehicle.getMembership().getUser().getId().equals(user.getId());
+        boolean isAdminOfSameSociety = user.getRole() == Role.ADMIN
+                && membershipRepository.existsByUserAndSocietyAndStatus(user, society, MembershipStatus.ACTIVE);
 
         if(!isOwner && !isAdminOfSameSociety) {
-            throw new RuntimeException("User not Authorized to view the history of the vehicle " + registrationNumber);
+            throw new AccessDeniedException("User not authorized to view the vehicle history");
         }
 
         // get the records of the vehicles in the entryexitrecords that have this society

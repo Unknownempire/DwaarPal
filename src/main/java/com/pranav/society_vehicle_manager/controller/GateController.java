@@ -22,8 +22,8 @@ public class GateController {
     }
 
     @GetMapping("/gates")
-    public ResponseEntity<List<GateResponse>> getSocietyGates(@RequestParam long userId) {
-        List<GateResponse> response = gateService.getGates(userId);
+    public ResponseEntity<List<GateResponse>> getSocietyGates(@RequestParam long userId, @RequestParam long societyId) {
+        List<GateResponse> response = gateService.getGates(userId, societyId);
         return ResponseEntity.ok(response);
     }
 

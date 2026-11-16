@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import com.pranav.society_vehicle_manager.enums.Role;
-import com.pranav.society_vehicle_manager.enums.Status;
+import com.pranav.society_vehicle_manager.enums.AccountStatus;
 
 @Entity 
 @Table(name = "users")
@@ -33,14 +33,6 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Status status;
+    private AccountStatus status;
 
-    @ManyToOne 
-    @JoinColumn(name = "society_id", nullable = false)
-    private Society society;
-
-    @ManyToOne
-    @JoinColumn(name = "flat_id")
-    private Flat flat;
-    
 }

@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DwaarPal Spring Security Login Flow</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: #101923;
+      --surface: #172532;
+      --surface-2: #1d3040;
+      --ink: #ecf3f8;
+      --muted: #b0c0cc;
+      --line: #466071;
+      --blue: #83c7ff;
+      --green: #8cddb0;
+      --amber: #ffd27d;
+      --red: #ffaaa0;
+      --code: #0c141c;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --page: #f4f7fa;
+        --surface: #ffffff;
+        --surface-2: #eaf2f7;
+        --ink: #142432;
+        --muted: #4e6271;
+        --line: #a6bac8;
+        --blue: #075d9b;
+        --green: #12663d;
+        --amber: #815400;
+        --red: #a82e25;
+        --code: #edf3f7;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { width: min(100% - 32px, 980px); margin: 32px auto 56px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(1.7rem, 4vw, 2.5rem); line-height: 1.15; margin-bottom: 10px; }
+    h2 { font-size: 1.35rem; margin: 34px 0 14px; }
+    h3 { font-size: 1rem; margin-bottom: 6px; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    .lede { color: var(--muted); max-width: 72ch; }
+    .status {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 11px; border-radius: 999px;
+      background: var(--surface-2); color: var(--amber); font-weight: 650;
+      margin: 8px 0 20px;
+    }
+    .status::before { content: "●"; font-size: .75rem; }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 20px; color: var(--muted); font-size: .9rem; margin-bottom: 14px; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot.app { background: var(--blue); }
+    .dot.spring { background: var(--amber); }
+    .dot.db { background: var(--green); }
+    .flow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .node {
+      background: var(--surface); border-left: 4px solid var(--blue);
+      border-radius: 10px; padding: 15px 18px; width: min(100%, 760px); justify-self: center;
+    }
+    .node.spring { border-left-color: var(--amber); }
+    .node.database { border-left-color: var(--green); }
+    .node.pending { border-left-color: var(--red); border-style: dashed; }
+    .node p { color: var(--muted); margin: 0; }
+    .node strong { color: var(--ink); }
+    .where { display: block; margin-top: 6px; color: var(--muted); font-size: .88rem; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      background: var(--code); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere;
+    }
+    .arrow { text-align: center; color: var(--muted); line-height: 1; padding: 8px; font-size: 1.45rem; }
+    .branch {
+      width: min(100%, 760px); justify-self: center; display: grid;
+      grid-template-columns: 1fr 1fr; gap: 14px; margin: 2px auto;
+    }
+    .branch .node { width: 100%; }
+    .note, .progress {
+      background: var(--surface-2); border-radius: 10px; padding: 16px 18px;
+      margin-top: 14px;
+    }
+    .note p:last-child, .progress p:last-child { margin-bottom: 0; }
+    .steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .step { background: var(--surface); border-radius: 9px; padding: 14px 16px; }
+    .step p { margin: 0; color: var(--muted); }
+    .done { color: var(--green); font-weight: 700; }
+    .todo { color: var(--amber); font-weight: 700; }
+    .file-list { padding-left: 20px; }
+    .file-list li { margin: 7px 0; color: var(--muted); }
+    .file-list code { color: var(--ink); }
+    .small { color: var(--muted); font-size: .9rem; }
+    @media (max-width: 620px) {
+      main { width: min(100% - 22px, 980px); margin-top: 22px; }
+      .branch, .steps { grid-template-columns: 1fr; }
+      .node { padding: 13px 14px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>DwaarPal login: how Spring Security fits together</h1>
+    <p class="lede">Follow the phone-and-password check from the mobile app, through your DwaarPal classes and Spring Security, to the JWT flow we are building.</p>
+    <div class="status">Partly connected: credentials can be checked; HTTP login and JWT use are still pending</div>
+  </header>
+
+  <section aria-labelledby="login-title">
+    <h2 id="login-title">A. Login and credential verification</h2>
+    <div class="legend" aria-label="Diagram key">
+      <span><i class="dot app" aria-hidden="true"></i>DwaarPal code</span>
+      <span><i class="dot spring" aria-hidden="true"></i>Spring Security</span>
+      <span><i class="dot db" aria-hidden="true"></i>Database lookup</span>
+    </div>
+
+    <div class="flow" role="list" aria-label="Login authentication sequence">
+      <article class="node" role="listitem">
+        <h3>1. Mobile app sends login details</h3>
+        <p>Phone number and the password the person typed are sent to the API. The intended endpoint is <code>POST /api/auth/login</code>.</p>
+        <span class="where">This endpoint/controller has not been created yet.</span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node" role="listitem">
+        <h3>2. LoginRequest carries the values</h3>
+        <p>The request DTO has <code>phone</code> and <code>password</code>, with validation that they are not blank. It is just a data container; it does not authenticate anyone.</p>
+        <span class="where">DwaarPal file: <code>src/main/java/com/pranav/society_vehicle_manager/dto/LoginRequest.java</code></span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node" role="listitem">
+        <h3>3. LoginService asks Spring to authenticate</h3>
+        <p><code>LoginService.authenticate()</code> packages phone and submitted password in a <code>UsernamePasswordAuthenticationToken</code>, then calls <code>authenticationManager.authenticate(...)</code>. At this point the submitted credentials are not yet trusted.</p>
+        <span class="where">DwaarPal file: <code>src/main/java/com/pranav/society_vehicle_manager/service/LoginService.java</code></span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node spring" role="listitem">
+        <h3>4. AuthenticationManager delegates the work</h3>
+        <p><code>AuthenticationManager</code> is Spring Security’s interface. Your configuration exposes Spring’s configured manager as a bean. Under the usual username/password setup, Spring uses a <code>ProviderManager</code> and a <code>DaoAuthenticationProvider</code>.</p>
+        <span class="where">DwaarPal exposes the manager in <code>security/SecurityConfig.java</code>; provider implementation is Spring Security code, not a DwaarPal class.</span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node spring" role="listitem">
+        <h3>5. DaoAuthenticationProvider asks for the account</h3>
+        <p>The provider calls Spring’s <code>UserDetailsService.loadUserByUsername(phone)</code>. It needs the stored password hash, account status, and authorities to finish the check.</p>
+        <span class="where">This is the Spring Security component that connects account lookup to password verification.</span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node" role="listitem">
+        <h3>6. DwaarPalUserDetailsService adapts DwaarPal’s user</h3>
+        <p>Because it is a Spring bean and implements Spring’s <code>UserDetailsService</code>, it can be used by the provider. It looks up the user by phone and returns Spring’s <code>UserDetails</code>: phone as username, stored BCrypt hash, role authority, and enabled/disabled account state.</p>
+        <span class="where">DwaarPal file: <code>src/main/java/com/pranav/society_vehicle_manager/security/DwaarPalUserDetailsService.java</code></span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node database" role="listitem">
+        <h3>7. UserRepository reads the account</h3>
+        <p><code>findByPhone(phone)</code> retrieves the matching DwaarPal <code>User</code> from PostgreSQL. The service converts that entity into Spring Security’s smaller account view.</p>
+        <span class="where">DwaarPal file: <code>src/main/java/com/pranav/society_vehicle_manager/repository/UserRepository.java</code>; entity: <code>entity/User.java</code></span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node spring" role="listitem">
+        <h3>8. PasswordEncoder checks the password</h3>
+        <p><code>DaoAuthenticationProvider</code> compares the submitted raw password to the stored BCrypt hash by using <code>PasswordEncoder.matches(...)</code>. It does not decrypt the hash. The provider also rejects an account marked disabled.</p>
+        <span class="where">The BCrypt encoder bean is in <code>security/SecurityConfig.java</code>; registration uses the same bean through <code>service/UserService.java</code>.</span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <div class="branch" role="group" aria-label="Possible authentication outcomes">
+        <article class="node database">
+          <h3>Credentials valid</h3>
+          <p>Spring returns an authenticated <code>Authentication</code> containing the verified principal and authorities. <code>LoginService</code> returns this result.</p>
+        </article>
+        <article class="node pending">
+          <h3>Credentials invalid / account inactive</h3>
+          <p>Spring rejects authentication. Later, the API should map this safely to a generic <code>401 Unauthorized</code> response without revealing whether the phone exists.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="token-title">
+    <h2 id="token-title">B. JWT issuance and later requests</h2>
+    <div class="flow" role="list" aria-label="JWT lifecycle sequence">
+      <article class="node pending" role="listitem">
+        <h3>9. Create a JWT after successful login</h3>
+        <p>A future token service will take the authenticated identity and ask <code>JwtEncoder</code> to sign a token with an expiry. The API will return it in <code>LoginResponse</code> as a Bearer access token.</p>
+        <span class="where">Not connected yet: <code>LoginService</code> currently returns Authentication, not a JWT. <code>LoginResponse</code> exists but no controller returns it.</span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node" role="listitem">
+        <h3>10. Mobile app sends the token later</h3>
+        <p>For protected requests, the app will send the token in the HTTP <code>Authorization: Bearer …</code> header. The token is signed, not encrypted, so it must not contain passwords or secrets.</p>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node spring" role="listitem">
+        <h3>11. SecurityFilterChain validates the bearer token</h3>
+        <p>The future filter-chain configuration will enable OAuth2 Resource Server JWT support. Spring will call <code>JwtDecoder</code> to verify the signature and expiry, then establish the authenticated identity for the request.</p>
+        <span class="where">Not connected yet: no DwaarPal <code>SecurityFilterChain</code> is configured.</span>
+      </article>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <article class="node pending" role="listitem">
+        <h3>12. Authorization protects DwaarPal resources</h3>
+        <p>After identity is established, request rules and service checks decide what the person may do. DwaarPal must still check society membership and ownership; a role such as ADMIN alone does not grant access to every society.</p>
+        <span class="where">Still to do: endpoint rules and replacing request-supplied actor IDs with authenticated identity.</span>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="terms-title">
+    <h2 id="terms-title">Quick notes: who does what?</h2>
+    <div class="steps">
+      <article class="step"><h3>UserService</h3><p>Registers residents and hashes a new password before saving it. It does not log users in.</p></article>
+      <article class="step"><h3>LoginService</h3><p>Submits login credentials to Spring’s manager. It does not look up the user or compare hashes itself.</p></article>
+      <article class="step"><h3>UserDetailsService</h3><p>Loads an existing account and translates it to Spring Security’s account format. It does not verify the submitted password.</p></article>
+      <article class="step"><h3>DaoAuthenticationProvider</h3><p>Spring’s provider that coordinates account loading and password checking for username/password authentication.</p></article>
+      <article class="step"><h3>AuthenticationManager</h3><p>Spring’s coordinator. DwaarPal exposes it as a bean so the login service can ask Spring to authenticate credentials.</p></article>
+      <article class="step"><h3>JwtEncoder / JwtDecoder</h3><p>Encoder signs the future access token; decoder verifies tokens on future requests. Both use the configured secret key for HS256.</p></article>
+    </div>
+  </section>
+
+  <section class="progress" aria-labelledby="progress-title">
+    <h2 id="progress-title">Implementation status</h2>
+    <p><span class="done">In place:</span> phone lookup, user-details adapter, BCrypt bean, AuthenticationManager bean, login request/response DTOs, LoginService credential submission, and JWT key/encoder/decoder beans in the current files.</p>
+    <p><span class="todo">Still needed:</span> login controller, JWT creation service, wiring token generation into successful login, SecurityFilterChain with bearer JWT validation, endpoint authorization, and using the authenticated identity throughout protected operations.</p>
+    <p class="small">The encoder and decoder beans are available as tools, but no login endpoint currently calls the encoder and no filter chain currently calls the decoder.</p>
+  </section>
+</main>
+</body>
+</html>

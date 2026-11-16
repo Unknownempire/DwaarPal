@@ -5,6 +5,7 @@ DwaarPal is a backend application designed to simplify vehicle registration, app
 ## Features
 
 - **Vehicle Registration:** Residents can register vehicles with details such as registration number, type, company, and model.
+- **Resident Membership:** Residents can request membership in a society and select a flat. A society admin approves or rejects each request; decisions record the reviewer and time.
 - **Vehicle Approval:** Administrators can approve or reject pending vehicle registrations.
 - **Vehicle Lookup:** Retrieve vehicle details using the registration number.
 - **Resident Vehicle Listing:** Retrieve vehicles registered by a resident.
@@ -56,8 +57,9 @@ The main domain entities are:
 - **Society:** Represents a residential society.
 - **Building:** Belongs to a society.
 - **Flat:** Belongs to a building.
-- **User:** Represents an administrator, security guard, or resident.
-- **Vehicle:** Belongs to a resident and a society.
+- **User:** Represents an account for an administrator, security guard, or resident.
+- **Membership:** Connects a user to a society and optionally a flat. Residents can share flats. Each application is a separate row, and the database permits at most one active membership per user in each society.
+- **Vehicle:** Belongs to a membership, preserving the society and flat context in which it was registered.
 - **Gate:** Represents an entry/exit gate in a society.
 - **EntryExitRecord:** Records a vehicle movement, the associated gate, the guard, the movement type, and its timestamp.
 
@@ -69,13 +71,36 @@ The following endpoints are implemented in the current backend.
 |---|---|---|
 | `POST` | `/api/vehicles` | Register a vehicle |
 | `GET` | `/api/vehicles/{registrationNumber}` | Retrieve vehicle details |
-| `PATCH` | `/api/vehicles/{registrationNumber}/status` | Approve or reject a vehicle |
-| `GET` | `/api/vehicles/pending` | List pending vehicle registrations |
+| `PATCH` | `/api/vehicles/{registrationNumber}/status?userId={adminId}&societyId={societyId}&updateStatus=APPROVED` | Approve or reject a vehicle |
+| `GET` | `/api/vehicles/pending?userId={adminId}&societyId={societyId}` | List pending vehicle registrations |
 | `GET` | `/api/vehicles/my-vehicles` | List vehicles belonging to a resident |
 | `POST` | `/api/vehicles/entry-exit` | Record a vehicle entry or exit |
-| `GET` | `/api/gates` | Retrieve gates for a guard's society |
+| `GET` | `/api/gates?userId={guardId}&societyId={societyId}` | Retrieve gates for a guard's society |
 | `GET` | `/api/entry-exit/history` | Retrieve entry/exit history for a society |
 | `GET` | `/api/vehicles/{registrationNumber}/history` | Retrieve history for a specific vehicle |
+| `POST` | `/api/users` | Register a resident account |
+| `GET` | `/api/societies` | List societies available for application |
+| `GET` | `/api/societies/{societyId}/buildings` | List buildings in a society |
+| `GET` | `/api/buildings/{buildingId}/flats` | List flats in a building |
+| `POST` | `/api/memberships?userId={id}` | Apply for membership using `societyId` and `flatId` |
+| `GET` | `/api/memberships/mine?userId={id}` | List a user's membership applications and memberships |
+| `GET` | `/api/memberships/pending?adminUserId={id}&societyId={id}` | List pending applications for an admin's society |
+| `PATCH` | `/api/memberships/{membershipId}/decision?adminUserId={id}&decision=ACTIVE` | Approve or reject a membership request (`decision=REJECTED` to reject) |
+| `PATCH` | `/api/memberships/{membershipId}/leave?userId={id}` | End an active membership and retain its history |
+
+Membership application example:
+
+```http
+POST http://localhost:8080/api/memberships?userId=1
+Content-Type: application/json
+
+{
+  "societyId": 2,
+  "flatId": 14
+}
+```
+
+Create an account first with `POST /api/users`; the response returns the new `userId` needed to apply for a membership. Public registration always creates a resident account, and passwords are stored as BCrypt hashes.
 
 Some endpoints currently accept `userId` as a request parameter for identifying the requesting user. This is a development-stage approach and must be replaced with authenticated identity and proper security controls before production deployment.
 
@@ -148,10 +173,10 @@ Retrieve a vehicle by its registration number:
 GET http://localhost:8080/api/vehicles/DL01AB1234
 ```
 
-Register a vehicle using a JSON request body:
+Register a vehicle using an active resident membership ID and a JSON request body:
 
 ```http
-POST http://localhost:8080/api/vehicles?userId=1
+POST http://localhost:8080/api/vehicles?membershipId=1
 Content-Type: application/json
 
 {
@@ -162,7 +187,9 @@ Content-Type: application/json
 }
 ```
 
-The vehicle registration request is associated with the specified user and starts with a pending approval status, according to the current business logic.
+The vehicle registration request is associated with that membership and starts with a pending vehicle approval status.
+
+Database changes are applied with Flyway at application startup. Existing installations are migrated from the former direct user and vehicle society links; back up the database before the first startup after upgrading.
 
 ## Current Limitations and Future Improvements
 

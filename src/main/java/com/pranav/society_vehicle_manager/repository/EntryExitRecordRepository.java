@@ -9,7 +9,7 @@ import java.util.List;
 
 
 public interface EntryExitRecordRepository extends JpaRepository<EntryExitRecord,Long>{
-    List<EntryExitRecord> findByVehicle_SocietyOrderByTimestampDesc(Society society);
+    List<EntryExitRecord> findByVehicle_Membership_SocietyOrderByTimestampDesc(Society society);
     List<EntryExitRecord> findByVehicle_RegistrationNumberOrderByTimestampDesc(
         String registrationNumber);
 

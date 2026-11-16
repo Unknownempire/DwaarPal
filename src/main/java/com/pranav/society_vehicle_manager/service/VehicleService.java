@@ -14,11 +14,14 @@ import com.pranav.society_vehicle_manager.dto.VehicleRequest;
 import com.pranav.society_vehicle_manager.dto.VehicleResponse;
 import com.pranav.society_vehicle_manager.entity.EntryExitRecord;
 import com.pranav.society_vehicle_manager.entity.Gate;
+import com.pranav.society_vehicle_manager.entity.Membership;
 import com.pranav.society_vehicle_manager.entity.Society;
 import com.pranav.society_vehicle_manager.entity.User;
 import com.pranav.society_vehicle_manager.entity.Vehicle;
 import com.pranav.society_vehicle_manager.enums.Role;
 import com.pranav.society_vehicle_manager.enums.Status;
+import com.pranav.society_vehicle_manager.enums.MembershipStatus;
+import com.pranav.society_vehicle_manager.enums.AccountStatus;
 import com.pranav.society_vehicle_manager.enums.VehicleLocationStatus;
 import com.pranav.society_vehicle_manager.enums.EntryExitType;
 import com.pranav.society_vehicle_manager.exception.AccessDeniedException;
@@ -34,6 +37,8 @@ import com.pranav.society_vehicle_manager.mapper.EntryExitMapper;
 import com.pranav.society_vehicle_manager.mapper.VehicleMapper;
 import com.pranav.society_vehicle_manager.repository.UserRepository;
 import com.pranav.society_vehicle_manager.repository.VehicleRepository;
+import com.pranav.society_vehicle_manager.repository.MembershipRepository;
+import com.pranav.society_vehicle_manager.repository.SocietyRepository;
 
 import jakarta.transaction.Transactional;
 
@@ -44,17 +49,22 @@ public class VehicleService {
     private final VehicleRepository vehicleRepository;
     private final UserRepository userRepository;
     private final GateRepository gateRepository;
+    private final MembershipRepository membershipRepository;
+    private final SocietyRepository societyRepository;
 
     private final VehicleMapper vehicleMapper;
     private final EntryExitMapper entryExitMapper;
 
     public VehicleService(VehicleRepository vehicleRepository, UserRepository userRepository,
             EntryExitRecordRepository entryExitRecordRepository,
-            GateRepository gateRepository, VehicleMapper vehicleMapper, EntryExitMapper entryExitMapper) {
+            GateRepository gateRepository, MembershipRepository membershipRepository, SocietyRepository societyRepository,
+            VehicleMapper vehicleMapper, EntryExitMapper entryExitMapper) {
         this.vehicleRepository = vehicleRepository;
         this.userRepository = userRepository;
         this.entryExitRecordRepository = entryExitRecordRepository;
         this.gateRepository = gateRepository;
+        this.membershipRepository = membershipRepository;
+        this.societyRepository = societyRepository;
         this.vehicleMapper = vehicleMapper;
         this.entryExitMapper = entryExitMapper;
     }
@@ -70,7 +80,18 @@ public class VehicleService {
         return vehicleMapper.toResponse(vehicle);
     }
 
-    public VehicleResponse createVehicle(VehicleRequest request, Long userId) {
+    public VehicleResponse createVehicle(VehicleRequest request, Long membershipId, Long authenticatedUserId) {
+
+        //authenticting user
+        User user = userRepository.findById(authenticatedUserId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        Membership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new UserNotFoundException("Membership not found"));
+
+        if(!membership.getUser().getId().equals(user.getId())) {
+            throw new AccessDeniedException("You can only register a vehicle for your own membership");
+        }
 
         String registrationNumber = request.getRegistrationNumber().trim().toUpperCase();
 
@@ -80,18 +101,20 @@ public class VehicleService {
             throw new VehicleAlreadyExistsException("Vehicle already registered " + registrationNumber);
         }
 
-        // vehicle not registered
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+        if (membership.getStatus() != MembershipStatus.ACTIVE || membership.getUser().getRole() != Role.RESIDENT) {
+            throw new AccessDeniedException("An active resident membership is required to register a vehicle");
+        }
+        if (membership.getUser().getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot register vehicles");
+        }
 
         Vehicle vehicle = new Vehicle();
 
         vehicle.setCompany(request.getCompany());
         vehicle.setRegistrationNumber(registrationNumber);
         vehicle.setModel(request.getModel());
-        vehicle.setOwner(user);
         vehicle.setStatus(Status.PENDING);
-        vehicle.setSociety(user.getSociety());
+        vehicle.setMembership(membership);
         vehicle.setType(request.getType());
         vehicle.setLocationStatus(VehicleLocationStatus.UNKNOWN);
 
@@ -104,11 +127,11 @@ public class VehicleService {
 
     }
 
-    public VehicleResponse updateVehicleStatus(String registrationNumber, long userId, Status updateStatus) {
+    public VehicleResponse updateVehicleStatus(String registrationNumber, long authenticatedUserId, long societyId, Status updateStatus) {
         String normalizedRegistrationNumber = registrationNumber.trim().toUpperCase();
 
         // checking whether the user is ADMIN or not
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(authenticatedUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         if (!user.getRole().equals(Role.ADMIN)) {
@@ -125,7 +148,12 @@ public class VehicleService {
         }
 
         //check vehicle belongs to the admins's society
-        if(!vehicle.getSociety().getId().equals(user.getSociety().getId())) {
+        Society adminSociety = societyRepository.findById(societyId)
+                .orElseThrow(() -> new UserNotFoundException("Society not found"));
+        if (!membershipRepository.existsByUserAndSocietyAndStatus(user, adminSociety, MembershipStatus.ACTIVE)) {
+            throw new AccessDeniedException("Admin does not have an active membership in this society");
+        }
+        if(!vehicle.getMembership().getSociety().getId().equals(societyId)) {
             throw new AccessDeniedException("Vehicle Doesn't belongs to the admin's Society");
         }
 
@@ -142,11 +170,11 @@ public class VehicleService {
         return vehicleMapper.toResponse(savedVehicle);
     }
 
-    public List<VehicleResponse> getPendingVehicle(long userId) {
+    public List<VehicleResponse> getPendingVehicle(long authenticatedUserId, long societyId) {
 
         // whether
         User user = userRepository
-                .findById(userId)
+                .findById(authenticatedUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         if (!user.getRole().equals(Role.ADMIN)) {
@@ -154,10 +182,15 @@ public class VehicleService {
             throw new AccessDeniedException("User is not Authorized");
         }
 
-        Society society = user.getSociety();
+        Society society = societyRepository.findById(societyId)
+                .orElseThrow(() -> new UserNotFoundException("Society not found"));
+        if (!membershipRepository.existsByUserAndSocietyAndStatus(user, society, MembershipStatus.ACTIVE)) {
+            throw new AccessDeniedException("Admin does not have an active membership in this society");
+        }
 
         // get Pending vehicles
-        List<Vehicle> pendingVehicles = vehicleRepository.findBySocietyAndStatus(society, Status.PENDING);
+        List<Vehicle> pendingVehicles = vehicleRepository.findByMembership_SocietyAndStatusAndMembership_Status(
+                society, Status.PENDING, MembershipStatus.ACTIVE);
 
         // put all the vehicles in response because that is what the admin will see
 
@@ -167,12 +200,16 @@ public class VehicleService {
     }
 
     @Transactional
-    public EntryExitResponse processVehicleEntryExit(String registrationNumber, long userId,
+    public EntryExitResponse processVehicleEntryExit(String registrationNumber, Long authenticatedUserId,
             EntryExitType entryExitType, long gateId) {
         // checking whether the user is GUARD or not
         String normalizedRegistrationNumber = registrationNumber.trim().toUpperCase();
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(authenticatedUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        if(user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("Inactive accounts cannot process vehicle entry/exit");
+        }
 
         if (user.getRole() != Role.GUARD) {
             // user is not an GUARD
@@ -187,17 +224,20 @@ public class VehicleService {
             throw new VehicleNotApprovedException("Vehicle Request has not been approved");
         }
 
-        // checking the the society of the vehicle and the user
-        if (!vehicle.getSociety().getId().equals(user.getSociety().getId())) {
-            throw new AccessDeniedException("Vehicle does not belong to society : " + user.getSociety().getName());
+        Society society = vehicle.getMembership().getSociety();
+        Membership guardMembership = membershipRepository.findFirstByUserAndSocietyAndStatus(user, society,
+                MembershipStatus.ACTIVE).orElseThrow(() -> new AccessDeniedException(
+                        "Guard has no active membership in society : " + society.getName()));
+        if (vehicle.getMembership().getStatus() != MembershipStatus.ACTIVE) {
+            throw new VehicleNotApprovedException("Vehicle owner's membership is no longer active");
         }
 
         // checking the gate id is valid or not and the gate belongs to the society
         Gate gate = gateRepository.findById(gateId)
                 .orElseThrow(() -> new GateNotFoundException("Gate not found " + gateId));
 
-        if (!gate.getSociety().getId().equals(user.getSociety().getId())) {
-            throw new AccessDeniedException("Gate does not belong to society : " + user.getSociety().getName());
+        if (!gate.getSociety().getId().equals(society.getId())) {
+            throw new AccessDeniedException("Gate does not belong to society : " + society.getName());
         }
 
         // checking the location status of the vehicle
@@ -224,16 +264,20 @@ public class VehicleService {
         entryExitRecord.setGuard(user);
 
         EntryExitRecord savedEntryExitRecord = entryExitRecordRepository.save(entryExitRecord);
-        
+
         return entryExitMapper.toResponse(savedEntryExitRecord);
     }
 
-    public List<VehicleResponse> myVehicles(long userId) {
+    public List<VehicleResponse> myVehicles(Long authenticatedUserId) {
         //Get the user
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(authenticatedUserId)
                                   .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        List<Vehicle> vehicles = vehicleRepository.findByOwner(user);
+        if (user.getRole() != Role.RESIDENT || user.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccessDeniedException("An active resident account is required");
+        }
+        //Optimize it by calling the vehicle user and flat from user in Join fetch JPQL query.
+        List<Vehicle> vehicles = vehicleRepository.findByMembership_User(user);
 
 
         return vehicles.stream()

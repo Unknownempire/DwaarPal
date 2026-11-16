@@ -10,6 +10,8 @@ import com.pranav.society_vehicle_manager.dto.VehicleResponse;
 import com.pranav.society_vehicle_manager.enums.EntryExitType;
 import com.pranav.society_vehicle_manager.enums.Status;
 import com.pranav.society_vehicle_manager.service.VehicleService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 import jakarta.validation.Valid;
 
@@ -40,22 +42,30 @@ public class VehicleController {
     }
 
     @PostMapping("/vehicles")
-    public ResponseEntity<VehicleResponse> createVehicle(@Valid @RequestBody VehicleRequest request,
-            @RequestParam Long userId) {
-        VehicleResponse response = vehicleService.createVehicle(request, userId);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(response);
+    public ResponseEntity<VehicleResponse> createVehicle(
+            @Valid @RequestBody VehicleRequest request,
+            @RequestParam long membershipId,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        VehicleResponse response =
+                vehicleService.createVehicle(request, membershipId, authenticatedUserId);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PatchMapping("/vehicles/{registrationNumber}/status")
     public ResponseEntity<VehicleResponse> updateVehicleStatus(
             @PathVariable String registrationNumber,
-            @RequestParam Long userId,
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam long societyId,
             @RequestParam Status updateStatus) {
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
 
         VehicleResponse response = vehicleService.updateVehicleStatus(
                 registrationNumber,
-                userId,
+                authenticatedUserId,
+                societyId,
                 updateStatus);
 
         return ResponseEntity.ok(response);
@@ -63,28 +73,31 @@ public class VehicleController {
 
     @GetMapping("/vehicles/pending")
     public ResponseEntity<List<VehicleResponse>> getPendingVehicles(
-            @RequestParam Long userId) {
+            @AuthenticationPrincipal Jwt jwt, @RequestParam long societyId) {
 
-        List<VehicleResponse> response = vehicleService.getPendingVehicle(userId);
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        List<VehicleResponse> response = vehicleService.getPendingVehicle(authenticatedUserId, societyId);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/vehicles/{registrationNumber}/entry-exit")
     public ResponseEntity<EntryExitResponse> processVehicleEntryExit(
             @PathVariable String registrationNumber,
-            @RequestParam long userId,
+            @AuthenticationPrincipal Jwt jwt,
             @RequestParam EntryExitType entryExitType,
             @RequestParam long gateId) {
 
-        EntryExitResponse response = vehicleService.processVehicleEntryExit(registrationNumber, userId, entryExitType, gateId);
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        EntryExitResponse response = vehicleService.processVehicleEntryExit(registrationNumber, authenticatedUserId, entryExitType, gateId);
         // return ResponseEntity.ok(response);
         return ResponseEntity.status(HttpStatus.CREATED)
                              .body(response);
     }
 
     @GetMapping("/vehicles/my-vehicles")
-    public ResponseEntity<List<VehicleResponse>> getUsersVehicles(@RequestParam long userId) {
-        List<VehicleResponse> response = vehicleService.myVehicles(userId);
+    public ResponseEntity<List<VehicleResponse>> getUsersVehicles(@AuthenticationPrincipal Jwt jwt) {
+        long authenticatedUserId = Long.parseLong(jwt.getSubject());
+        List<VehicleResponse> response = vehicleService.myVehicles(authenticatedUserId);
         return ResponseEntity.ok(response);
     }
 
