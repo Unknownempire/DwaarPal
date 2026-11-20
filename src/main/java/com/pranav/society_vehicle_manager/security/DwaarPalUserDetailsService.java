@@ -24,7 +24,7 @@ public class DwaarPalUserDetailsService implements UserDetailsService {
         User user = userRepository.findByPhone(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with phone: " + username));
 
-//        return org.springframework.security.core.userdetails.User
+//        return org.springframework.security.core.userdetaWe go to the Dwaarpal service, the Dwaarpal user detail service. In that we have a user repository, which finds the phone, and it is stored in a user detail type. Now the password encoder checks against the BCrypt hash ils.User
 //                .withUsername(user.getPhone())
 //                .password(user.getPassword())
 //                .disabled(user.getStatus() != AccountStatus.ACTIVE)

@@ -1,97 +1,161 @@
-# DwaarPal — Society Vehicle Management System
+# DwaarPal — Society Vehicle Management API
 
-DwaarPal is a backend application designed to simplify vehicle registration, approval, and gate entry/exit tracking in residential societies. It helps society administrators manage registered vehicles and enables security guards to record vehicle movements at society gates.
+DwaarPal is a Spring Boot REST API for managing residential society memberships, vehicle approvals, gates, and vehicle entry/exit records. Residents, society administrators, and security guards use authenticated, role-based endpoints to perform the actions allowed for their role.
 
-## Features
+This repository contains the backend API. It does not currently contain a mobile or web frontend.
 
-- **Vehicle Registration:** Residents can register vehicles with details such as registration number, type, company, and model.
-- **Resident Membership:** Residents can request membership in a society and select a flat. A society admin approves or rejects each request; decisions record the reviewer and time.
-- **Vehicle Approval:** Administrators can approve or reject pending vehicle registrations.
-- **Vehicle Lookup:** Retrieve vehicle details using the registration number.
-- **Resident Vehicle Listing:** Retrieve vehicles registered by a resident.
-- **Gate Management:** Guards can retrieve the gates configured for their society.
-- **Entry/Exit Tracking:** Guards can record vehicle entry and exit movements while validating vehicle approval and movement status.
-- **Movement History:** Retrieve society-wide entry/exit history and vehicle-specific history, subject to the implemented access checks.
-- **Centralized Exception Handling:** Return structured error responses for application errors and validation failures.
+## Current features
 
-## Tech Stack
+- Resident account registration and phone/password login.
+- Stateless JWT bearer-token authentication with role-based endpoint access.
+- Public society, building, and flat catalogs used when applying for membership.
+- Resident membership applications, application history, admin decisions, and resident membership leave.
+- Resident vehicle registration, personal vehicle listing, and vehicle lookup for authorized users.
+- Admin review of pending membership applications and vehicle registrations.
+- Admin gate creation and guard gate listing.
+- Guard-recorded vehicle entry and exit, with checks for approval, society membership, gate ownership, and current vehicle location.
+- Society movement history for admins and guards, and vehicle movement history for its resident owner or active society staff.
+- Bean validation and centralized application error handling.
 
-- **Language:** Java 21
-- **Framework:** Spring Boot
-- **Persistence:** Spring Data JPA, Hibernate
-- **Database:** PostgreSQL
-- **Build Tool:** Maven
-- **API Style:** REST
+## Roles and workflows
 
-## Architecture
+### Resident
 
-The application follows a layered architecture:
+1. Register an account. Public registration creates a resident account.
+2. Log in with phone and password to receive a JWT.
+3. Browse societies, buildings, and flats, then submit a membership application.
+4. Check membership application status. An active membership is required to register vehicles.
+5. Register a vehicle and check its approval status and movement history.
+6. Leave an active membership when needed; the membership record is retained as inactive.
 
-```text
-Client
-  |
-  v
-Controllers
-  |
-  v
-Services
-  |
-  v
-Repositories
-  |
-  v
-PostgreSQL Database
+### Society administrator
+
+An administrator with an active membership in the relevant society can review pending resident membership applications, approve or reject vehicle registrations, view society movement history, and create gates for that society.
+
+### Security guard
+
+A guard with an active membership in the vehicle's society can list that society's gates and record an approved vehicle's entry or exit at a gate belonging to that society. Duplicate movements that conflict with the recorded inside/outside status are rejected.
+
+## Technology
+
+- Java 21
+- Spring Boot 4.1.1
+- Spring MVC, Spring Security, OAuth2 Resource Server JWT support
+- Spring Data JPA / Hibernate
+- PostgreSQL
+- Flyway database migrations
+- Maven Wrapper
+
+## Run locally
+
+### Prerequisites
+
+- Java 21
+- PostgreSQL
+
+Create a database, for example:
+
+```sql
+CREATE DATABASE society_vehicle_manager;
 ```
 
-- **Controllers:** Handle HTTP requests and responses.
-- **Services:** Implement business rules and access checks.
-- **Repositories:** Retrieve and persist data using Spring Data JPA.
-- **Entities:** Represent societies, buildings, flats, users, vehicles, gates, and entry/exit records.
-- **DTOs and Mappers:** Separate API request/response structures from persistence entities.
-- **Exception Handling:** Centralize application error responses.
+Configure these environment variables before starting the API:
 
-## Data Model
+| Variable | Example |
+|---|---|
+| `DB_URL` | `jdbc:postgresql://localhost:5432/society_vehicle_manager` |
+| `DB_USERNAME` | `postgres` |
+| `DB_PASSWORD` | Your local PostgreSQL password |
+| `DWAARPAL_JWT_SECRET` | Base64-encoded secret key for HS256 signing |
 
-The main domain entities are:
+Keep secrets out of source control. Generate a suitably long random key and provide its Base64 encoding as `DWAARPAL_JWT_SECRET`.
 
-- **Society:** Represents a residential society.
-- **Building:** Belongs to a society.
-- **Flat:** Belongs to a building.
-- **User:** Represents an account for an administrator, security guard, or resident.
-- **Membership:** Connects a user to a society and optionally a flat. Residents can share flats. Each application is a separate row, and the database permits at most one active membership per user in each society.
-- **Vehicle:** Belongs to a membership, preserving the society and flat context in which it was registered.
-- **Gate:** Represents an entry/exit gate in a society.
-- **EntryExitRecord:** Records a vehicle movement, the associated gate, the guard, the movement type, and its timestamp.
+Start the application from the repository root:
 
-## API Endpoints
+```powershell
+.\mvnw.cmd spring-boot:run
+```
 
-The following endpoints are implemented in the current backend.
+```bash
+./mvnw spring-boot:run
+```
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `POST` | `/api/vehicles` | Register a vehicle |
-| `GET` | `/api/vehicles/{registrationNumber}` | Retrieve vehicle details |
-| `PATCH` | `/api/vehicles/{registrationNumber}/status?userId={adminId}&societyId={societyId}&updateStatus=APPROVED` | Approve or reject a vehicle |
-| `GET` | `/api/vehicles/pending?userId={adminId}&societyId={societyId}` | List pending vehicle registrations |
-| `GET` | `/api/vehicles/my-vehicles` | List vehicles belonging to a resident |
-| `POST` | `/api/vehicles/entry-exit` | Record a vehicle entry or exit |
-| `GET` | `/api/gates?userId={guardId}&societyId={societyId}` | Retrieve gates for a guard's society |
-| `GET` | `/api/entry-exit/history` | Retrieve entry/exit history for a society |
-| `GET` | `/api/vehicles/{registrationNumber}/history` | Retrieve history for a specific vehicle |
-| `POST` | `/api/users` | Register a resident account |
-| `GET` | `/api/societies` | List societies available for application |
-| `GET` | `/api/societies/{societyId}/buildings` | List buildings in a society |
-| `GET` | `/api/buildings/{buildingId}/flats` | List flats in a building |
-| `POST` | `/api/memberships?userId={id}` | Apply for membership using `societyId` and `flatId` |
-| `GET` | `/api/memberships/mine?userId={id}` | List a user's membership applications and memberships |
-| `GET` | `/api/memberships/pending?adminUserId={id}&societyId={id}` | List pending applications for an admin's society |
-| `PATCH` | `/api/memberships/{membershipId}/decision?adminUserId={id}&decision=ACTIVE` | Approve or reject a membership request (`decision=REJECTED` to reject) |
-| `PATCH` | `/api/memberships/{membershipId}/leave?userId={id}` | End an active membership and retain its history |
+By default, the API listens at `http://localhost:8080`. Flyway migrations are applied at startup, and Hibernate validates the resulting schema (`ddl-auto=validate`).
 
-Membership application example:
+## Authentication
+
+Registration and login are public. All other endpoints require a bearer token unless noted in the endpoint table.
+
+Register a resident:
 
 ```http
-POST http://localhost:8080/api/memberships?userId=1
+POST /api/users
+Content-Type: application/json
+
+{
+  "name": "Rohan Mehta",
+  "phone": "9876543210",
+  "email": "rohan@example.com",
+  "password": "change-me-123"
+}
+```
+
+Log in with the registered phone number and password:
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "phone": "9876543210",
+  "password": "change-me-123"
+}
+```
+
+The response contains `accessToken`, `tokenType` (`Bearer`), and `expiresIn` (seconds). Send the token on protected requests:
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+Passwords are encoded with BCrypt. Registration always creates a `RESIDENT`; administrator and guard accounts must be provisioned through an appropriate trusted process. The API uses stateless JWT authentication and derives the acting user from the token rather than caller-supplied user IDs.
+
+## API endpoints
+
+Protected endpoints require `Authorization: Bearer <accessToken>`. Role access is enforced both in Spring Security and by service-level society/membership checks.
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| `POST` | `/api/users` | Public | Register a resident account |
+| `POST` | `/api/auth/login` | Public | Authenticate with phone and password; return a JWT |
+| `GET` | `/api/societies` | Public | List societies |
+| `GET` | `/api/societies/{societyId}/buildings` | Public | List buildings in a society |
+| `GET` | `/api/buildings/{buildingId}/flats` | Public | List flats in a building |
+| `POST` | `/api/memberships` | Resident | Apply to join a society and flat |
+| `GET` | `/api/memberships/mine` | Resident | List own membership applications and memberships |
+| `GET` | `/api/memberships/pending?societyId={id}` | Admin | List pending applications for an authorized society |
+| `PATCH` | `/api/memberships/{membershipId}/decision?decision={ACTIVE\|REJECTED}` | Admin | Approve or reject a pending application |
+| `PATCH` | `/api/memberships/{membershipId}/leave` | Resident | End own active membership |
+| `POST` | `/api/vehicles?membershipId={id}` | Resident | Register a vehicle for own active membership |
+| `GET` | `/api/vehicles/my-vehicles` | Resident | List own vehicles |
+| `GET` | `/api/vehicles/{registrationNumber}` | Resident, guard, admin | Look up a vehicle if authorized for its society |
+| `GET` | `/api/vehicles/pending?societyId={id}` | Admin | List pending vehicles for an authorized society |
+| `PATCH` | `/api/vehicles/{registrationNumber}/status?societyId={id}&updateStatus={APPROVED\|REJECTED}` | Admin | Approve or reject a pending vehicle |
+| `POST` | `/api/vehicles/{registrationNumber}/entry-exit?entryExitType={ENTRY\|EXIT}&gateId={id}` | Guard | Record vehicle movement at an authorized society gate |
+| `GET` | `/api/gates?societyId={id}` | Guard | List gates for an authorized society |
+| `POST` | `/api/societies/{societyId}/gates` | Admin | Create a gate in an authorized society |
+| `GET` | `/api/entry-exit/history` | Admin, guard | List movement history for societies where the user has active membership |
+| `GET` | `/api/entry-exit/vehicles/{registrationNumber}/history` | Resident, guard, admin | View a vehicle's history when authorized for its society |
+
+Vehicle types are `CAR`, `BIKE`, `SCOOTER`, and `OTHER`. Vehicle approval statuses are `PENDING`, `APPROVED`, `REJECTED`, and `INACTIVE`; membership statuses are `PENDING`, `ACTIVE`, `REJECTED`, and `INACTIVE`. Movement types are `ENTRY` and `EXIT`.
+
+## Example: apply for a membership
+
+After registering and logging in, use the JWT to submit a society ID and flat ID from the public location catalogs:
+
+```http
+POST /api/memberships
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
@@ -100,83 +164,15 @@ Content-Type: application/json
 }
 ```
 
-Create an account first with `POST /api/users`; the response returns the new `userId` needed to apply for a membership. Public registration always creates a resident account, and passwords are stored as BCrypt hashes.
+The request starts as `PENDING`. The selected flat must belong to the selected society, and a resident cannot have another pending or active membership in that society.
 
-Some endpoints currently accept `userId` as a request parameter for identifying the requesting user. This is a development-stage approach and must be replaced with authenticated identity and proper security controls before production deployment.
+## Example: register a vehicle
 
-## Getting Started
-
-### Prerequisites
-
-Install the following:
-
-- Java 21
-- PostgreSQL
-- Git
-
-The repository includes the Maven Wrapper, so a separate Maven installation is not required.
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Unknownempire/DwaarPal.git
-cd DwaarPal
-```
-
-### 2. Create the database
-
-Create a PostgreSQL database named:
-
-```sql
-CREATE DATABASE society_vehicle_manager;
-```
-
-### 3. Configure environment variables
-
-Configure the following environment variables before starting the application:
-
-| Variable | Example |
-|---|---|
-| `DB_URL` | `jdbc:postgresql://localhost:5432/society_vehicle_manager` |
-| `DB_USERNAME` | Your PostgreSQL username |
-| `DB_PASSWORD` | Your PostgreSQL password |
-
-Do not commit real credentials to the repository.
-
-### 4. Start the application
-
-On Windows PowerShell:
-
-```powershell
-.\mvnw.cmd spring-boot:run
-```
-
-On macOS/Linux:
-
-```bash
-./mvnw spring-boot:run
-```
-
-The application runs on:
-
-```text
-http://localhost:8080
-```
-
-The current configuration uses Hibernate schema updates for development. Review database migration and configuration practices before deploying to production.
-
-## Example Request
-
-Retrieve a vehicle by its registration number:
+An active resident membership is required. Registration starts with `PENDING` approval and an unknown location status.
 
 ```http
-GET http://localhost:8080/api/vehicles/DL01AB1234
-```
-
-Register a vehicle using an active resident membership ID and a JSON request body:
-
-```http
-POST http://localhost:8080/api/vehicles?membershipId=1
+POST /api/vehicles?membershipId=1
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
@@ -187,22 +183,25 @@ Content-Type: application/json
 }
 ```
 
-The vehicle registration request is associated with that membership and starts with a pending vehicle approval status.
+Registration numbers are trimmed and normalized to uppercase. A vehicle registration number can only be registered once.
 
-Database changes are applied with Flyway at application startup. Existing installations are migrated from the former direct user and vehicle society links; back up the database before the first startup after upgrading.
+## Data model
 
-## Current Limitations and Future Improvements
+- **Society**, **Building**, and **Flat** provide the location hierarchy.
+- **User** stores an account, role, and account status.
+- **Membership** links a user to a society and flat, including application, review, and end history. Multiple residents can share a flat; a user can have at most one active membership per society.
+- **Vehicle** belongs to a membership and stores vehicle details, approval status, and current location status.
+- **Gate** belongs to a society.
+- **EntryExitRecord** records the vehicle, gate, guard, movement type, and timestamp.
 
-- Implement Spring Security authentication and role-based authorization using the authenticated user rather than a client-provided `userId`.
-- Add automated integration tests for authorization, vehicle movement rules, and error handling.
-- Add pagination and filtering for movement history.
-- Improve database migration and production configuration.
-- Explore number plate recognition and a mobile interface for residents and security guards.
+## Current scope and limitations
 
-## Project Status
-
-The backend's core vehicle registration, approval, gate listing, and entry/exit tracking APIs have been implemented. Authentication hardening, broader automated testing, and production readiness remain areas for improvement.
+- The repository provides backend APIs only; a mobile app/frontend has not been implemented here.
+- Public registration creates resident accounts. The current API does not expose public admin or guard provisioning.
+- Movement history endpoints do not currently expose pagination or date/filter query parameters.
+- No automated integration test coverage for all role and movement rules is documented yet.
+- Configure database credentials and the JWT signing secret securely for each environment before deployment.
 
 ---
 
-**DwaarPal** — A backend foundation for safer and more organized residential vehicle management.
+**DwaarPal** — API foundations for safer, more organized vehicle access in residential societies.

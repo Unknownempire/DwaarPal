@@ -7,7 +7,9 @@ Use this note to continue the Spring Security learning and implementation work i
 - The user is a student and wants a senior-engineer mentor, not silent implementation.
 - Work in small steps. Explain each component in simple terms, where it is used, who calls it, and why it is needed.
 - The user usually edits the files themselves, then asks for a read-only review. Inspect the actual code before saying a step is complete.
-- Do not run tests or implementation commands unless the user asks. Postman guidance is welcome; the user runs Postman themselves.
+- Work on one API at a time. When an API implementation is complete, test it in Postman before moving on. The user has used Postman for prior API checks and wants this workflow repeated for every completed API.
+- If Postman testing reveals a bug, report the behavior and evidence to the user, work through a fix with them, then rerun the relevant Postman checks until the API behaves as expected. Do not treat an API as complete until this test/fix/retest loop is done.
+- The user runs tests themselves unless they ask otherwise. Do not run automated tests or implementation commands unless asked; Postman test guidance and reviewing the user's reported results are welcome.
 - Do not ask for or repeat secrets, passwords, or JWTs. Never place actual secret values in documentation.
 - The product is a mobile app using a Spring Boot REST API. The user chose JWT bearer authentication.
 
